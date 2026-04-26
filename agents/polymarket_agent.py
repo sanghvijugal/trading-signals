@@ -81,8 +81,19 @@ def is_financial(question: str) -> str | None:
 
 def get_yes_probability(market: dict) -> float:
     """Extract YES probability from market data."""
-    prices = market.get("outcomePrices", [])
-    outcomes = market.get("outcomes", [])
+    import json as _json
+
+    def parse_field(val):
+        """outcomePrices and outcomes come back as JSON strings, not lists."""
+        if isinstance(val, str):
+            try:
+                return _json.loads(val)
+            except Exception:
+                return []
+        return val or []
+
+    prices = parse_field(market.get("outcomePrices"))
+    outcomes = parse_field(market.get("outcomes"))
 
     # Find the index of "Yes" outcome
     try:
