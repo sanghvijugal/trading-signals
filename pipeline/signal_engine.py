@@ -92,6 +92,7 @@ def generate_signal(
     polymarket_probability: float | None = None,
     vix_score: float = 0.0,
     macro_context_score: float = 0.5,
+    trigger_source: str = "kalshi_spike",
 ) -> Signal:
     kalshi_spike = compute_kalshi_spike_score(kalshi_z)
     poly_div = compute_polymarket_divergence_score(yes_price, polymarket_probability)
@@ -121,6 +122,7 @@ def generate_signal(
         direction=determine_direction(kalshi_z, asset_change_pct, polymarket_probability, yes_price),
         confidence=confidence_label(final_score),
         price_at_signal=asset_price,
+        trigger_source=trigger_source,
     )
 
     session = get_session()

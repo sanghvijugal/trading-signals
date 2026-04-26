@@ -43,6 +43,7 @@ KEYWORD_TO_SERIES = {
 
 MIN_VOLUME_24H = 500     # ignore illiquid markets
 FETCH_LIMIT = 100        # fetch top N by volume before filtering
+ANOMALY_THRESHOLD = 2.0  # z-score threshold to flag a Polymarket spike
 
 
 def fetch_top_markets() -> list[dict]:
@@ -129,17 +130,23 @@ def compute_volume_zscore(condition_id: str, current_volume: float) -> float:
     return 0.0 if std == 0 else float((current_volume - mean) / std)
 
 
-def run() -> list[dict]:
+def run() -> dict:
     """
     Fetch top Polymarket markets, keep only financial ones, store snapshots.
-    Returns list of relevant markets with probabilities for divergence scoring.
+
+    Returns:
+        {
+            "all":       [...all financial markets...],
+            "anomalies": [...markets with volume z-score >= ANOMALY_THRESHOLD...]
+        }
     """
-    all_markets = fetch_top_markets()
-    results = []
+    raw_markets = fetch_top_markets()
+    all_results = []
+    anomalies = []
     session = get_session()
     seen = set()
 
-    for market in all_markets:
+    for market in raw_markets:
         question = market.get("question", "")
         if not question:
             continue
@@ -181,15 +188,25 @@ def run() -> list[dict]:
             "matched_keyword": matched_kw,
             "kalshi_series": kalshi_series,
         }
-        results.append(result)
+        all_results.append(result)
 
-        print(
-            f"[Polymarket] {question[:55]}... "
-            f"| p={probability:.0%} | vol={volume_24h:,.0f} | series={kalshi_series}"
-        )
+        if abs(z) >= ANOMALY_THRESHOLD:
+            anomalies.append(result)
+            print(
+                f"[Polymarket] *** Spike: {question[:50]}... "
+                f"z={z:.2f} | p={probability:.0%} | vol={volume_24h:,.0f} ***"
+            )
+        else:
+            print(
+                f"[Polymarket] {question[:52]}... "
+                f"| p={probability:.0%} | vol={volume_24h:,.0f} | z={z:.2f}"
+            )
 
     session.commit()
     session.close()
 
-    print(f"[Polymarket] {len(results)} financial markets found (from {len(all_markets)} total)")
-    return results
+    print(
+        f"[Polymarket] {len(all_results)} financial markets | "
+        f"{len(anomalies)} spike(s) detected"
+    )
+    return {"all": all_results, "anomalies": anomalies}

@@ -112,6 +112,7 @@ class Signal(Base):
     final_score = Column(Float, nullable=False)
     direction = Column(String(8))
     confidence = Column(String(8))
+    trigger_source = Column(String(32))  # "kalshi_spike" | "polymarket_spike" | "divergence"
 
     # Backtesting columns (filled in later)
     price_at_signal = Column(Float)

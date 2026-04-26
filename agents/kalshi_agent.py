@@ -137,16 +137,25 @@ def compute_volume_zscore(ticker: str, current_volume: int) -> float:
     return float((current_volume - mean) / std)
 
 
-def run() -> list[dict]:
-    """Fetch all tracked markets, store snapshots, return anomalies."""
+def run() -> dict:
+    """
+    Fetch all tracked markets, store snapshots.
+
+    Returns:
+        {
+            "all":       [...every market snapshot...],
+            "anomalies": [...markets with z-score >= ANOMALY_THRESHOLD...]
+        }
+    """
     global _MARKET_MAP
-    _MARKET_MAP = {}  # reset cache each pipeline run to pick up new daily markets
+    _MARKET_MAP = {}  # reset each run to auto-refresh daily tickers
 
     market_map = get_market_map()
     if not market_map:
         print("[Kalshi] No markets found — check API key and series tickers")
-        return []
+        return {"all": [], "anomalies": []}
 
+    all_markets = []
     anomalies = []
     session = get_session()
 
@@ -174,18 +183,26 @@ def run() -> list[dict]:
         )
         session.add(snapshot)
 
+        market_dict = {
+            "ticker": ticker,
+            "asset": asset,
+            "yes_price": yes_price,
+            "volume": volume,
+            "volume_z_score": z,
+            "series": get_series_from_ticker(ticker),
+        }
+        all_markets.append(market_dict)
+
         print(f"[Kalshi] {ticker} | yes={yes_price:.1f}¢ | vol={volume} | z={z:.2f}")
 
         if abs(z) >= ANOMALY_THRESHOLD:
-            anomalies.append({
-                "ticker": ticker,
-                "asset": asset,
-                "yes_price": yes_price,
-                "volume": volume,
-                "volume_z_score": z,
-            })
-            print(f"[Kalshi] *** Anomaly: {ticker} z={z:.2f} ***")
+            anomalies.append(market_dict)
+            print(f"[Kalshi] *** Spike: {ticker} z={z:.2f} ***")
 
     session.commit()
     session.close()
-    return anomalies
+    return {"all": all_markets, "anomalies": anomalies}
+
+
+def get_series_from_ticker(ticker: str) -> str:
+    return ticker.split("-")[0]

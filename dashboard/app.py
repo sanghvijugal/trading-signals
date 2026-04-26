@@ -34,6 +34,7 @@ if signals:
         "Time (UTC)": s.generated_at.strftime("%Y-%m-%d %H:%M"),
         "Kalshi Market": s.market_ticker,
         "Asset": s.asset_ticker,
+        "Trigger": s.trigger_source or "—",
         "Score": round(s.final_score, 3),
         "Dir": s.direction,
         "Confidence": s.confidence,
@@ -48,6 +49,13 @@ if signals:
     } for s in signals]
 
     df = pd.DataFrame(rows)
+
+    def color_trigger(val):
+        if val == "divergence":
+            return "background-color: #cce5ff; color: #004085"
+        if val == "polymarket_spike":
+            return "background-color: #e2d9f3; color: #432874"
+        return ""
 
     def color_confidence(val):
         if val == "high":
@@ -71,6 +79,7 @@ if signals:
 
     st.dataframe(
         df.style
+          .applymap(color_trigger, subset=["Trigger"])
           .applymap(color_confidence, subset=["Confidence"])
           .applymap(color_return, subset=["1h Return", "4h Return", "24h Return"]),
         use_container_width=True,

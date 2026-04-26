@@ -11,16 +11,13 @@ from storage.db import engine, init_db
 
 
 MIGRATIONS = [
-    # New columns on signals table
+    # v2 columns
     "ALTER TABLE signals ADD COLUMN IF NOT EXISTS polymarket_divergence_score FLOAT",
     "ALTER TABLE signals ADD COLUMN IF NOT EXISTS price_divergence_score FLOAT",
     "ALTER TABLE signals ADD COLUMN IF NOT EXISTS vix_score FLOAT",
     "ALTER TABLE signals ADD COLUMN IF NOT EXISTS macro_context_score FLOAT",
-
-    # Rename old column if it exists (safe — ignores error if already renamed)
-    # divergence_score → price_divergence_score (handled above via ADD COLUMN)
-
-    # New tables (init_db handles these, but listed here for clarity)
+    # v3 columns
+    "ALTER TABLE signals ADD COLUMN IF NOT EXISTS trigger_source VARCHAR(32)",
 ]
 
 

@@ -24,8 +24,12 @@ WEIGHTS = {
     "news_velocity": 0.15,
 }
 
-# Z-score threshold to trigger an anomaly
+# Z-score threshold to trigger a Kalshi or Polymarket anomaly
 ANOMALY_THRESHOLD = 2.0
+
+# Cross-market divergence threshold — fires even without a volume spike
+# 0.20 = Kalshi and Polymarket disagree by 20%+ on same topic
+DIVERGENCE_THRESHOLD = 0.20
 
 # Lookback window for z-score baseline (in minutes)
 ZSCORE_WINDOW = 60
