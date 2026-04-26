@@ -25,6 +25,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Run migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python migrate.py
+
       - name: Run pipeline (single pass)
         env:
           KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
