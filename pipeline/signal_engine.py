@@ -128,7 +128,8 @@ def generate_signal(
     session = get_session()
     session.add(signal)
     session.commit()
-    session.expunge(signal)  # detach before close so attributes stay accessible
+    session.refresh(signal)  # reload attributes before they expire on close
+    session.expunge(signal)  # detach so object stays usable after session closes
     session.close()
 
     return signal
