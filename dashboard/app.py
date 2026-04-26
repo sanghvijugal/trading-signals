@@ -108,9 +108,9 @@ if signals:
 
     st.dataframe(
         df.style
-          .applymap(color_trigger, subset=["Trigger"])
-          .applymap(color_confidence, subset=["Confidence"])
-          .applymap(color_return, subset=["1h Return", "4h Return", "24h Return"]),
+          .map(color_trigger, subset=["Trigger"])
+          .map(color_confidence, subset=["Confidence"])
+          .map(color_return, subset=["1h Return", "4h Return", "24h Return"]),
         use_container_width=True,
     )
 
