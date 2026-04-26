@@ -17,9 +17,6 @@ These provide macro context for weighting signals:
 """
 import os
 import requests
-from datetime import datetime
-from storage.db import get_session
-from storage.models import MacroSnapshot
 
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
@@ -108,17 +105,6 @@ def run() -> dict:
     cpi = fetch_series("CPIAUCSL")
 
     macro_score = compute_macro_context_score(yield_curve, fed_funds, cpi)
-
-    session = get_session()
-    snap = MacroSnapshot(
-        yield_curve=yield_curve,
-        fed_funds_rate=fed_funds,
-        cpi_yoy=cpi,
-        macro_context_score=macro_score if hasattr(MacroSnapshot, 'macro_context_score') else None,
-    )
-    session.add(snap)
-    session.commit()
-    session.close()
 
     print(
         f"[FRED] Fed={fed_funds}% | Yield curve={yield_curve}% | "
