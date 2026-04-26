@@ -10,6 +10,7 @@ from datetime import datetime
 from config import DIVERGENCE_THRESHOLD
 from agents import kalshi_agent, price_agent, news_agent
 from agents import polymarket_agent, vix_agent, fred_agent
+from agents import alert_agent
 from pipeline.signal_engine import generate_signal
 from pipeline import backtester
 from storage.db import get_session
@@ -201,6 +202,7 @@ def run_pipeline() -> list:
             f"conf={signal.confidence} | trigger={cand['trigger']} | "
             f"kalshi={cand['yes_price']:.0f}¢ | poly={poly_str}"
         )
+        alert_agent.send_alert(signal)
 
     # ── Step 7: Backtest past signals ─────────────────────────────────
     backtester.run()
