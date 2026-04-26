@@ -4,16 +4,12 @@ FRED Macro Agent — fetches key macro indicators from the Federal Reserve.
 Free API: https://fred.stlouisfed.org/docs/api/api_key.html
 Set FRED_API_KEY in your .env and GitHub Secrets.
 
-Data fetched:
-  DFF    — Effective Federal Funds Rate
-  T10Y2Y — 10Y-2Y Treasury yield spread (recession indicator)
-  CPIAUCSL — CPI All Urban Consumers (inflation)
-  UNRATE — Unemployment Rate
+Signal inputs (real-time enough to matter):
+  DFF    — Effective Federal Funds Rate (daily)
+  T10Y2Y — 10Y-2Y Treasury yield spread (daily)
 
-These provide macro context for weighting signals:
-  - Inverted yield curve → recession risk → down-weight bullish signals
-  - Rising CPI → Fed more likely to hike → up-weight Fed rate signals
-  - Low unemployment → strong economy → different signal baseline
+Display only (monthly, already priced in by the time we see it):
+  CPIAUCSL — CPI index level (shown on dashboard but not used in scoring)
 """
 import os
 import requests
@@ -21,12 +17,6 @@ import requests
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 FRED_API_KEY = os.getenv("FRED_API_KEY")
-
-SERIES = {
-    "DFF": "fed_funds_rate",
-    "T10Y2Y": "yield_curve",
-    "CPIAUCSL": "cpi_yoy",
-}
 
 
 def fetch_series(series_id: str) -> float | None:
@@ -62,58 +52,54 @@ def fetch_series(series_id: str) -> float | None:
 def compute_macro_context_score(
     yield_curve: float | None,
     fed_funds: float | None,
-    cpi: float | None,
 ) -> float:
     """
     Score 0.0-1.0 representing macro stress level.
+    Based on yield curve + fed funds rate only — both update daily.
 
-    High score = stressed macro environment = signals more meaningful.
-    Low score = calm macro = signals may be noise.
+    High score = stressed macro = signals more meaningful
+    Low score  = calm macro    = signals may be noise
     """
     score = 0.0
     components = 0
 
     if yield_curve is not None:
         # Inverted yield curve (negative) = high stress
+        # 0.53% spread → low stress; -0.5% → high stress
         yc_score = max(0.0, min(1.0, (-yield_curve + 0.5) / 2.0))
         score += yc_score
         components += 1
 
     if fed_funds is not None:
-        # Higher rates = more macro sensitivity
+        # Higher rates = tighter conditions = more signal sensitivity
+        # 3.64% → score ~0.61; 0% → 0.0; 6%+ → 1.0
         ff_score = min(fed_funds / 6.0, 1.0)
         score += ff_score
-        components += 1
-
-    if cpi is not None:
-        # High inflation = more macro stress
-        cpi_score = min(max(cpi - 2.0, 0.0) / 6.0, 1.0)
-        score += cpi_score
         components += 1
 
     return round(score / components, 4) if components > 0 else 0.5
 
 
 def run() -> dict:
-    """Fetch all macro indicators, store snapshot, return context score."""
+    """Fetch macro indicators, return context score."""
     if not FRED_API_KEY:
-        print("[FRED] No FRED_API_KEY set — add it to .env and GitHub Secrets")
+        print("[FRED] No FRED_API_KEY — defaulting macro_context_score to 0.5")
         return {"macro_context_score": 0.5, "yield_curve": None, "fed_funds_rate": None, "cpi_yoy": None}
 
     fed_funds = fetch_series("DFF")
     yield_curve = fetch_series("T10Y2Y")
-    cpi = fetch_series("CPIAUCSL")
+    cpi = fetch_series("CPIAUCSL")   # fetched for display only, not scoring
 
-    macro_score = compute_macro_context_score(yield_curve, fed_funds, cpi)
+    macro_score = compute_macro_context_score(yield_curve, fed_funds)
 
     print(
         f"[FRED] Fed={fed_funds}% | Yield curve={yield_curve}% | "
-        f"CPI={cpi}% | macro_score={macro_score:.2f}"
+        f"CPI index={cpi} (display only) | macro_score={macro_score:.2f}"
     )
 
     return {
         "macro_context_score": macro_score,
         "yield_curve": yield_curve,
         "fed_funds_rate": fed_funds,
-        "cpi_yoy": cpi,
+        "cpi_yoy": cpi,  # stored for dashboard display, not used in scoring
     }
