@@ -24,6 +24,7 @@ FINANCIAL_KEYWORDS = [
     "dollar", "treasury", "yield curve",
     "oil", "crude", "opec", "wti", "brent",
     "tariff", "trade war", "trump tariff", "import tax", "trade deal",
+    "china tariff", "prc tariff", "eu tariff", "europe tariff",
 ]
 
 # Map financial keywords → Kalshi series (for divergence matching)
@@ -46,11 +47,16 @@ KEYWORD_TO_SERIES = {
     "opec": "KXWTI",
     "wti": "KXWTI",
     "brent": "KXWTI",
-    "tariff": "KXTAR",
-    "trade war": "KXTAR",
-    "trump tariff": "KXTAR",
-    "import tax": "KXTAR",
-    "trade deal": "KXTAR",
+    "tariff": "KXTARIFFRATEPRC",        # default tariff → China (dominant story)
+    "trade war": "KXTARIFFRATEPRC",
+    "trump tariff": "KXTARIFFRATEPRC",
+    "import tax": "KXTARIFFRATEPRC",
+    "trade deal": "KXTARIFFRATEPRC",
+    "china tariff": "KXTARIFFRATEPRC",
+    "prc tariff": "KXTARIFFRATEPRC",
+    "eu tariff": "KXTARIFFRATEEU",
+    "europe tariff": "KXTARIFFRATEEU",
+    "european union tariff": "KXTARIFFRATEEU",
 }
 
 MIN_VOLUME_24H = 500     # ignore illiquid markets

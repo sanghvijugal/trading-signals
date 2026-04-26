@@ -17,7 +17,8 @@ PERSISTENT_SERIES = {
     "KXINFL": "TIP",     # Inflation markets → TIPS ETF
     "KXUNEMP": "SPY",    # Unemployment → SPY
     "KXWTI": "USO",      # WTI oil price markets → US Oil Fund ETF
-    "KXTAR": "SPY",      # Tariff/trade war markets → SPY (risk proxy)
+    "KXTARIFFRATEEU": "SPY",   # US tariff rate on EU → SPY (risk proxy)
+    "KXTARIFFRATEPRC": "SPY",  # US tariff rate on China → SPY (risk proxy)
 }
 
 # Daily series — auto-refreshed each run to highest-volume open market

@@ -24,7 +24,8 @@ SERIES_TO_NEWS_TOPIC = {
     "KXINFL": "inflation",
     "KXUNEMP": "unemployment",
     "KXWTI": "oil",
-    "KXTAR": "tariff",
+    "KXTARIFFRATEEU": "tariff EU",
+    "KXTARIFFRATEPRC": "tariff China",
 }
 
 
