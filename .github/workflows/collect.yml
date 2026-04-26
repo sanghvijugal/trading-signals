@@ -30,4 +30,5 @@ jobs:
           KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python run_once.py

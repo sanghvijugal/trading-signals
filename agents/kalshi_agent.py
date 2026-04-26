@@ -11,30 +11,110 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-# Map Kalshi market tickers → related tradeable asset ticker
-# Find live tickers at: https://kalshi.com/markets
-KALSHI_TO_ASSET = {
-    # Fed rate markets — long-lived (expire Apr 2027), moderate volume
-    "KXFED-27APR-T4.25": "TLT",    # Fed above 4.25%? → Treasury ETF
-    "KXFED-27APR-T4.00": "TLT",    # Fed above 4.00%? → Treasury ETF
-    # BTC daily — highest volume, but expires daily → update ticker each morning
-    "KXBTC-26APR2617-T67750": "BTC-USD",  # BTC above $67,750 at 5pm today
+# Long-lived series to always track (don't expire daily)
+PERSISTENT_SERIES = {
+    "KXFED": "TLT",      # Fed rate decisions → Treasury ETF
+    "KXINFL": "TIP",     # Inflation markets → TIPS ETF
+    "KXUNEMP": "SPY",    # Unemployment → SPY
 }
 
-TRACKED_MARKETS = list(KALSHI_TO_ASSET.keys())
+# Daily series — auto-refreshed each run to highest-volume open market
+DAILY_SERIES = {
+    "KXBTC": "BTC-USD",
+    "KXETH": "ETH-USD",
+}
+
+# Minimum 24h volume to track a market
+MIN_VOLUME = 10
 
 
 def fetch_market(ticker: str) -> dict | None:
     url = f"{KALSHI_BASE_URL}/markets/{ticker}"
     resp = requests.get(url, headers=HEADERS, timeout=10)
     if resp.status_code != 200:
-        print(f"[Kalshi] Failed to fetch {ticker}: {resp.status_code} {resp.text[:100]}")
+        print(f"[Kalshi] Failed to fetch {ticker}: {resp.status_code}")
         return None
     return resp.json().get("market")
 
 
+def find_best_market(series_ticker: str) -> dict | None:
+    """Find the highest-volume open market for a given series."""
+    resp = requests.get(
+        f"{KALSHI_BASE_URL}/markets",
+        headers=HEADERS,
+        params={"series_ticker": series_ticker, "status": "open", "limit": 20},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return None
+
+    markets = resp.json().get("markets", [])
+    if not markets:
+        return None
+
+    # Pick highest 24h volume
+    best = max(markets, key=lambda m: float(m.get("volume_24h_fp") or 0))
+    vol = float(best.get("volume_24h_fp") or 0)
+    if vol < MIN_VOLUME:
+        return None
+
+    return best
+
+
+def find_best_persistent_markets(series_ticker: str, limit: int = 3) -> list[dict]:
+    """Find top markets by volume for a long-lived series."""
+    resp = requests.get(
+        f"{KALSHI_BASE_URL}/markets",
+        headers=HEADERS,
+        params={"series_ticker": series_ticker, "status": "open", "limit": 20},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return []
+
+    markets = resp.json().get("markets", [])
+    markets.sort(key=lambda m: float(m.get("volume_24h_fp") or 0), reverse=True)
+    return markets[:limit]
+
+
+def build_market_map() -> dict[str, str]:
+    """
+    Dynamically build ticker → asset map each run.
+    Persistent series: top 3 by volume.
+    Daily series: single highest-volume market.
+    """
+    market_map: dict[str, str] = {}
+
+    for series, asset in PERSISTENT_SERIES.items():
+        for m in find_best_persistent_markets(series):
+            ticker = m.get("ticker", "")
+            vol = float(m.get("volume_24h_fp") or 0)
+            if ticker and vol >= MIN_VOLUME:
+                market_map[ticker] = asset
+
+    for series, asset in DAILY_SERIES.items():
+        best = find_best_market(series)
+        if best:
+            ticker = best.get("ticker", "")
+            if ticker:
+                market_map[ticker] = asset
+                print(f"[Kalshi] Auto-selected {series}: {ticker} (vol={float(best.get('volume_24h_fp',0)):.0f})")
+
+    return market_map
+
+
+# Global cache so we don't re-query on every call within the same run
+_MARKET_MAP: dict[str, str] = {}
+
+
+def get_market_map() -> dict[str, str]:
+    global _MARKET_MAP
+    if not _MARKET_MAP:
+        _MARKET_MAP = build_market_map()
+    return _MARKET_MAP
+
+
 def compute_volume_zscore(ticker: str, current_volume: int) -> float:
-    """Z-score of current volume vs the last ZSCORE_WINDOW minutes of history."""
     session = get_session()
     cutoff = datetime.utcnow() - timedelta(minutes=ZSCORE_WINDOW)
     rows = (
@@ -47,7 +127,7 @@ def compute_volume_zscore(ticker: str, current_volume: int) -> float:
 
     volumes = [r[0] for r in rows if r[0] is not None]
     if len(volumes) < 5:
-        return 0.0  # not enough history yet — will stabilize after ~25 min
+        return 0.0
 
     mean = np.mean(volumes)
     std = np.std(volumes)
@@ -58,15 +138,19 @@ def compute_volume_zscore(ticker: str, current_volume: int) -> float:
 
 
 def run() -> list[dict]:
-    """
-    Fetch all tracked markets, store snapshots, return anomalies.
+    """Fetch all tracked markets, store snapshots, return anomalies."""
+    global _MARKET_MAP
+    _MARKET_MAP = {}  # reset cache each pipeline run to pick up new daily markets
 
-    Returns a list of dicts for markets where volume z-score >= ANOMALY_THRESHOLD.
-    """
+    market_map = get_market_map()
+    if not market_map:
+        print("[Kalshi] No markets found — check API key and series tickers")
+        return []
+
     anomalies = []
     session = get_session()
 
-    for ticker in TRACKED_MARKETS:
+    for ticker, asset in market_map.items():
         data = fetch_market(ticker)
         if data is None:
             continue
@@ -95,12 +179,12 @@ def run() -> list[dict]:
         if abs(z) >= ANOMALY_THRESHOLD:
             anomalies.append({
                 "ticker": ticker,
+                "asset": asset,
                 "yes_price": yes_price,
                 "volume": volume,
                 "volume_z_score": z,
-                "direction": "spike_up" if z > 0 else "spike_down",
             })
-            print(f"[Kalshi] Anomaly detected: {ticker} z={z:.2f}")
+            print(f"[Kalshi] *** Anomaly: {ticker} z={z:.2f} ***")
 
     session.commit()
     session.close()
