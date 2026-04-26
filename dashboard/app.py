@@ -4,11 +4,40 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 from storage.db import get_session, init_db
 from storage.models import Signal, KalshiSnapshot, PolymarketSnapshot, MacroSnapshot
+from agents.alert_agent import send_alert
 
 st.set_page_config(page_title="Signal Dashboard", layout="wide", page_icon="📡")
-st.title("📡 Cross-Market Anomaly Signals")
+
+col_title, col_btn = st.columns([6, 1])
+col_title.title("📡 Cross-Market Anomaly Signals")
+
+with col_btn:
+    st.write("")  # vertical spacing
+    if st.button("Test Alert"):
+        dummy = Signal(
+            market_ticker="KXFED-26JUN",
+            asset_ticker="TLT",
+            direction="long",
+            confidence="high",
+            final_score=0.74,
+            trigger_source="divergence",
+            kalshi_spike_score=0.61,
+            polymarket_divergence_score=0.83,
+            price_divergence_score=0.45,
+            vix_score=0.52,
+            news_velocity_score=0.30,
+            macro_context_score=0.67,
+            price_at_signal=87.43,
+            generated_at=datetime.utcnow(),
+        )
+        sent = send_alert(dummy)
+        if sent:
+            st.success("Test email sent — check jugaltsanghvi@gmail.com")
+        else:
+            st.error("Failed — check RESEND_API_KEY is set in Streamlit secrets")
 
 init_db()
 session = get_session()
