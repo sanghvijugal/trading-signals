@@ -5,6 +5,8 @@ on:
     # Every 15 minutes — stays within GitHub free tier limits
     - cron: "*/15 * * * *"
   workflow_dispatch:  # allows manual trigger from GitHub UI
+  push:
+    branches: [master]
 
 jobs:
   collect:
