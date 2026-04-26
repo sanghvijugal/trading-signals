@@ -62,19 +62,26 @@ def fetch_put_call_ratio() -> float | None:
         return None
 
 
-def compute_vix_score(vix: float, vix_change: float) -> float:
+def compute_vix_score(vix: float, vix_change: float, put_call: float | None = None) -> float:
     """
     Score 0.0-1.0 representing how much fear is in the market.
 
+    Components:
+      - VIX level:       VIX < 15 = calm (0.0), VIX > 45 = extreme fear (1.0)
+      - VIX spike:       rapid day-over-day move amplifies signal
+      - Put/call ratio:  > 1.2 = fear, < 0.7 = complacency
+
     High score = high fear = prediction markets may lag reality.
-    VIX > 30 → score near 1.0
-    VIX < 15 → score near 0.0
     """
-    # Normalize VIX: 15=low, 30=high, cap at 45
-    level_score = np.clip((vix - 15) / (45 - 15), 0.0, 1.0)
-    # Spike component: rapid change adds signal
-    spike_score = np.clip(abs(vix_change) / 20.0, 0.0, 1.0)
-    return round(float(0.6 * level_score + 0.4 * spike_score), 4)
+    level_score = float(np.clip((vix - 15) / (45 - 15), 0.0, 1.0))
+    spike_score = float(np.clip(abs(vix_change) / 20.0, 0.0, 1.0))
+
+    if put_call is not None:
+        # 0.7 = complacent (0.0), 1.5 = high fear (1.0)
+        pc_score = float(np.clip((put_call - 0.7) / (1.5 - 0.7), 0.0, 1.0))
+        return round(0.5 * level_score + 0.3 * spike_score + 0.2 * pc_score, 4)
+
+    return round(0.6 * level_score + 0.4 * spike_score, 4)
 
 
 def run() -> dict:
@@ -84,7 +91,7 @@ def run() -> dict:
 
     vix = vix_data["vix"] if vix_data else None
     vix_change = vix_data["vix_change_1d"] if vix_data else None
-    vix_score = compute_vix_score(vix, vix_change) if vix else 0.0
+    vix_score = compute_vix_score(vix, vix_change, put_call) if vix else 0.0
 
     print(
         f"[VIX] VIX={vix} ({vix_change:+.1f}% 1d) | "

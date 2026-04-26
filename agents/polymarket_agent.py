@@ -20,8 +20,10 @@ FINANCIAL_KEYWORDS = [
     "fed", "federal reserve", "interest rate", "rate cut", "rate hike", "fomc",
     "bitcoin", "btc", "ethereum", "eth", "crypto",
     "inflation", "cpi", "unemployment", "gdp", "recession",
-    "nasdaq", "s&p", "stock market", "oil", "gold",
-    "dollar", "treasury", "yield curve", "tariff", "trade war",
+    "nasdaq", "s&p", "stock market", "gold",
+    "dollar", "treasury", "yield curve",
+    "oil", "crude", "opec", "wti", "brent",
+    "tariff", "trade war", "trump tariff", "import tax", "trade deal",
 ]
 
 # Map financial keywords → Kalshi series (for divergence matching)
@@ -39,6 +41,16 @@ KEYWORD_TO_SERIES = {
     "inflation": "KXINFL",
     "cpi": "KXINFL",
     "unemployment": "KXUNEMP",
+    "oil": "KXOIL",
+    "crude": "KXOIL",
+    "opec": "KXOIL",
+    "wti": "KXOIL",
+    "brent": "KXOIL",
+    "tariff": "KXTAR",
+    "trade war": "KXTAR",
+    "trump tariff": "KXTAR",
+    "import tax": "KXTAR",
+    "trade deal": "KXTAR",
 }
 
 MIN_VOLUME_24H = 500     # ignore illiquid markets
