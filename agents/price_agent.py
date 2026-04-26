@@ -1,8 +1,6 @@
 import yfinance as yf
-from datetime import datetime
 from storage.db import get_session
 from storage.models import PriceSnapshot
-from agents.kalshi_agent import KALSHI_TO_ASSET
 
 
 def fetch_price(ticker: str) -> dict | None:
@@ -29,19 +27,15 @@ def fetch_price(ticker: str) -> dict | None:
         return None
 
 
-def run(kalshi_tickers: list[str]) -> dict[str, dict]:
+def run(asset_tickers: list[str]) -> dict[str, dict]:
     """
-    Fetch prices for assets linked to the given Kalshi market tickers.
-
+    Fetch prices for a list of asset tickers.
     Returns a dict of asset_ticker -> price data.
     """
     results = {}
     session = get_session()
 
-    # Deduplicate asset tickers
-    asset_tickers = list({KALSHI_TO_ASSET[t] for t in kalshi_tickers if t in KALSHI_TO_ASSET})
-
-    for asset in asset_tickers:
+    for asset in list(set(asset_tickers)):  # deduplicate
         data = fetch_price(asset)
         if data is None:
             continue
