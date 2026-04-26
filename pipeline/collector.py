@@ -39,16 +39,9 @@ def match_polymarket_prob(
 ) -> float | None:
     """Find the best matching Polymarket probability for a Kalshi market."""
     series = get_series_from_ticker(kalshi_ticker)
-    matching_topic = next(
-        (t for t, s in POLY_TOPIC_TO_SERIES.items() if s == series), None
-    )
-    if not matching_topic:
-        return None
-
-    matches = [r for r in polymarket_results if r.get("topic") == matching_topic]
+    matches = [r for r in polymarket_results if r.get("kalshi_series") == series]
     if not matches:
         return None
-
     # Use highest-volume match
     best = max(matches, key=lambda r: r.get("volume_24h", 0))
     return best.get("probability")

@@ -1,11 +1,10 @@
 """
-Polymarket Agent — tracks prediction market probabilities.
+Polymarket Agent — tracks high-volume financial prediction markets.
 
-Polymarket has 10-100x more volume than Kalshi on financial markets.
-No API key required for read-only access.
+Strategy: fetch top markets by 24h volume, post-filter by financial keywords.
+This avoids the Polymarket API's broken tag/category filtering.
 
-Primary signal: divergence between Kalshi and Polymarket on the same topic.
-If Kalshi says 60% and Polymarket says 40% → one market is wrong → edge.
+No API key required.
 """
 import requests
 import numpy as np
@@ -16,40 +15,92 @@ from storage.models import PolymarketSnapshot
 
 GAMMA_API = "https://gamma-api.polymarket.com"
 
-# Topics to track — maps a label to Polymarket search keywords
-# Find markets at: https://polymarket.com/markets
-TRACKED_TOPICS = [
-    "federal reserve rate",
-    "bitcoin price",
-    "ethereum price",
-    "inflation",
-    "unemployment",
+# Keywords that identify a financially relevant market
+FINANCIAL_KEYWORDS = [
+    "fed", "federal reserve", "interest rate", "rate cut", "rate hike", "fomc",
+    "bitcoin", "btc", "ethereum", "eth", "crypto",
+    "inflation", "cpi", "unemployment", "gdp", "recession",
+    "nasdaq", "s&p", "stock market", "oil", "gold",
+    "dollar", "treasury", "yield curve", "tariff", "trade war",
 ]
 
-# Minimum 24h volume to consider a market liquid enough
-MIN_VOLUME = 1000
+# Map financial keywords → Kalshi series (for divergence matching)
+KEYWORD_TO_SERIES = {
+    "fed": "KXFED",
+    "federal reserve": "KXFED",
+    "interest rate": "KXFED",
+    "rate cut": "KXFED",
+    "rate hike": "KXFED",
+    "fomc": "KXFED",
+    "bitcoin": "KXBTC",
+    "btc": "KXBTC",
+    "ethereum": "KXETH",
+    "eth": "KXETH",
+    "inflation": "KXINFL",
+    "cpi": "KXINFL",
+    "unemployment": "KXUNEMP",
+}
+
+MIN_VOLUME_24H = 500     # ignore illiquid markets
+FETCH_LIMIT = 100        # fetch top N by volume before filtering
 
 
-def fetch_markets(keyword: str, limit: int = 5) -> list[dict]:
+def fetch_top_markets() -> list[dict]:
+    """Fetch top markets by 24h volume."""
     try:
         resp = requests.get(
             f"{GAMMA_API}/markets",
-            params={"q": keyword, "limit": limit, "active": "true", "closed": "false"},
-            timeout=10,
+            params={
+                "limit": FETCH_LIMIT,
+                "active": "true",
+                "closed": "false",
+                "order": "volume24hr",
+                "ascending": "false",
+            },
+            timeout=15,
         )
         if resp.status_code != 200:
-            print(f"[Polymarket] Failed for '{keyword}': {resp.status_code}")
+            print(f"[Polymarket] API error: {resp.status_code}")
             return []
         return resp.json()
     except Exception as e:
-        print(f"[Polymarket] Error fetching '{keyword}': {e}")
+        print(f"[Polymarket] Fetch error: {e}")
         return []
 
 
+def is_financial(question: str) -> str | None:
+    """
+    Return the matched keyword if this market is financially relevant, else None.
+    """
+    q = question.lower()
+    for kw in FINANCIAL_KEYWORDS:
+        if kw in q:
+            return kw
+    return None
+
+
+def get_yes_probability(market: dict) -> float:
+    """Extract YES probability from market data."""
+    prices = market.get("outcomePrices", [])
+    outcomes = market.get("outcomes", [])
+
+    # Find the index of "Yes" outcome
+    try:
+        yes_idx = [o.lower() for o in outcomes].index("yes")
+        return float(prices[yes_idx])
+    except (ValueError, IndexError):
+        pass
+
+    # Fallback: use first price
+    try:
+        return float(prices[0]) if prices else 0.5
+    except (ValueError, TypeError):
+        return 0.5
+
+
 def compute_volume_zscore(condition_id: str, current_volume: float) -> float:
-    """Z-score of current 24h volume vs the last hour of history."""
     session = get_session()
-    cutoff = datetime.utcnow() - timedelta(hours=1)
+    cutoff = datetime.utcnow() - timedelta(hours=2)
     rows = (
         session.query(PolymarketSnapshot.volume_24h)
         .filter(PolymarketSnapshot.condition_id == condition_id)
@@ -64,67 +115,70 @@ def compute_volume_zscore(condition_id: str, current_volume: float) -> float:
 
     mean = np.mean(volumes)
     std = np.std(volumes)
-    if std == 0:
-        return 0.0
-
-    return float((current_volume - mean) / std)
+    return 0.0 if std == 0 else float((current_volume - mean) / std)
 
 
 def run() -> list[dict]:
     """
-    Fetch Polymarket snapshots for all tracked topics.
-    Returns list of high-volume markets with their probabilities.
+    Fetch top Polymarket markets, keep only financial ones, store snapshots.
+    Returns list of relevant markets with probabilities for divergence scoring.
     """
+    all_markets = fetch_top_markets()
     results = []
     session = get_session()
+    seen = set()
 
-    for topic in TRACKED_TOPICS:
-        markets = fetch_markets(topic)
+    for market in all_markets:
+        question = market.get("question", "")
+        if not question:
+            continue
 
-        for market in markets:
-            volume_24h = float(market.get("volume24hr") or market.get("volume") or 0)
-            if volume_24h < MIN_VOLUME:
-                continue
+        matched_kw = is_financial(question)
+        if not matched_kw:
+            continue
 
-            condition_id = market.get("conditionId") or market.get("id", "")
-            question = market.get("question", "").encode("ascii", "ignore").decode()[:256]
+        volume_24h = float(market.get("volume24hr") or 0)
+        if volume_24h < MIN_VOLUME_24H:
+            continue
 
-            # Polymarket binary markets have outcomes array
-            outcomes = market.get("outcomes", ["Yes", "No"])
-            out_prices = market.get("outcomePrices", ["0.5", "0.5"])
+        condition_id = market.get("conditionId") or market.get("id", "")
+        if condition_id in seen:
+            continue
+        seen.add(condition_id)
 
-            try:
-                yes_prob = float(out_prices[0]) if out_prices else 0.5
-            except (ValueError, IndexError):
-                yes_prob = 0.5
+        probability = get_yes_probability(market)
+        z = compute_volume_zscore(condition_id, volume_24h)
+        kalshi_series = KEYWORD_TO_SERIES.get(matched_kw)
 
-            z = compute_volume_zscore(condition_id, volume_24h)
+        snap = PolymarketSnapshot(
+            condition_id=condition_id,
+            question=question.encode("ascii", "ignore").decode()[:256],
+            outcome="Yes",
+            probability=round(probability, 4),
+            volume_24h=volume_24h,
+            volume_total=float(market.get("volume") or 0),
+            volume_z_score=z,
+        )
+        session.add(snap)
 
-            snap = PolymarketSnapshot(
-                condition_id=condition_id,
-                question=question,
-                outcome="Yes",
-                probability=round(yes_prob, 4),
-                volume_24h=volume_24h,
-                volume_total=float(market.get("volume") or 0),
-                volume_z_score=z,
-            )
-            session.add(snap)
+        result = {
+            "condition_id": condition_id,
+            "question": question[:65],
+            "probability": probability,
+            "volume_24h": volume_24h,
+            "volume_z_score": z,
+            "matched_keyword": matched_kw,
+            "kalshi_series": kalshi_series,
+        }
+        results.append(result)
 
-            results.append({
-                "condition_id": condition_id,
-                "question": question[:60],
-                "probability": yes_prob,
-                "volume_24h": volume_24h,
-                "volume_z_score": z,
-                "topic": topic,
-            })
-
-            print(
-                f"[Polymarket] {question[:55]}... "
-                f"| p={yes_prob:.0%} | vol={volume_24h:.0f} | z={z:.2f}"
-            )
+        print(
+            f"[Polymarket] {question[:55]}... "
+            f"| p={probability:.0%} | vol={volume_24h:,.0f} | series={kalshi_series}"
+        )
 
     session.commit()
     session.close()
+
+    print(f"[Polymarket] {len(results)} financial markets found (from {len(all_markets)} total)")
     return results
