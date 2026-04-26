@@ -23,7 +23,7 @@ SERIES_TO_NEWS_TOPIC = {
     "KXETH": "ethereum",
     "KXINFL": "inflation",
     "KXUNEMP": "unemployment",
-    "KXOIL": "oil",
+    "KXWTI": "oil",
     "KXTAR": "tariff",
 }
 
