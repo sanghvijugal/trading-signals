@@ -19,8 +19,8 @@ def fetch_price(ticker: str) -> dict | None:
             "ticker": ticker,
             "price": round(float(latest["Close"]), 4),
             "volume": int(latest["Volume"]),
-            "change_1h_pct": round((latest["Close"] - prev_1h) / prev_1h * 100, 4),
-            "change_24h_pct": round((latest["Close"] - prev_24h) / prev_24h * 100, 4),
+            "change_1h_pct": round(float((latest["Close"] - prev_1h) / prev_1h * 100), 4),
+            "change_24h_pct": round(float((latest["Close"] - prev_24h) / prev_24h * 100), 4),
         }
     except Exception as e:
         print(f"[Price] Failed to fetch {ticker}: {e}")
